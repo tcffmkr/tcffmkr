@@ -1,0 +1,622 @@
+
+<html>
+    <head>
+      <meta charset="utf-8" />
+      <meta
+        name="viewport"
+        content="initial-scale=1,maximum-scale=1,user-scalable=no"
+      />
+      <title>
+        EMMS in Houston
+      </title>
+
+          <!-- Load the Chart.js library -->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.4.0/Chart.min.js"></script>
+
+      <link rel="stylesheet" href="https://js.arcgis.com/4.23//esri/themes/light/main.css" />
+      <script src="https://js.arcgis.com/4.23//"></script>
+  
+      <style>
+        html,
+        body {
+          padding: 0;
+          margin: 0;
+          height: 100%;
+          width: 100%;
+          overflow: hidden;
+        }
+        #viewDiv {
+          position: absolute;
+          left: 0;
+          right: 380px;
+          top: 0;
+          bottom: 0;
+          height: 100%
+        }
+        #panel {
+          position: absolute;
+          right: 0;
+          height: 100%;
+          width: 380px;
+        }
+      </style>
+  
+      <script>
+        require([
+          "esri/config",
+          "esri/Map",
+          "esri/views/MapView",
+          "esri/layers/FeatureLayer",
+          "esri/symbols/SimpleMarkerSymbol",
+          "esri/renderers/SimpleRenderer",
+          "esri/symbols/SimpleFillSymbol",
+          "esri/widgets/Legend",
+          "esri/widgets/Expand",
+          "esri/widgets/Home",
+          "esri/widgets/LayerList",
+          "esri/core/watchUtils"
+        ],(
+          esriConfig,
+          Map,
+          MapView,
+          FeatureLayer,
+          SimpleMarkerSymbol,
+          SimpleFillSymbol,
+          SimpleRenderer,
+          Legend, Expand, Home, LayerList, watchUtils
+        )=> {
+          const defaultSym = {
+           type: "simple-fill", // autocasts as new SimpleFillSymbol()
+           outline: {
+            // autocasts as new SimpleLineSymbol()
+             color: [128, 128, 128, 0.2],
+             width: "0.5px"
+           }
+          };
+          esriConfig.apiKey = "AAPK6bd19e5a04234f108698b9e2ace4ee0cLUosNno7GyJyHYosePgamyox39KWx0s_EIosEe2PLUycngSr14OF3Qb8hyL36O9s";
+ 
+          
+
+          // renderer style for lines and polygons by unique value and gradual value
+          const renderer = {
+            type: "simple", // autocasts as new SimpleRenderer()
+            symbol: defaultSym,
+            label: "U.S. Census Block Group",
+            visualVariables: [
+              {
+                type: "color",
+                field: "Lowmod_pct",
+                legendOptions: {
+                  title: "% population in low and moderate risk by census block"
+                },
+                stops: [
+                  {
+                    value: 0.1,
+                    color: "#FFFCD4",
+                    label: "<10%"
+                  },
+                  {
+                    value: 0.5,
+                    color: "#350242",
+                    label: ">50%"
+                  }
+                ]
+             }
+            ]
+          };
+  
+
+          const renderer_line = {
+            type: "unique-value", 
+            field: "Risk_Desc",
+            uniqueValueInfos: [
+            {
+                value: "Low",
+                symbol: {
+                type: "simple-line",
+                color: "green"
+                }
+            },{
+                value: "Moderate",
+                symbol: {
+                type: "simple-line",
+                color: "yellow"
+                }
+            },{
+                value: "High",
+                symbol: {
+                type: "simple-line",
+                color: "red"
+                }
+            },
+            ]
+          };  
+
+          const clusterConfig_p = {
+            type: "cluster",
+            clusterRadius: "100px",
+            // {cluster_count} is an aggregate field containing
+            // the number of features comprised by the cluster
+            popupTemplate: {
+              title: "Cluster summary",
+              content: "This cluster represents {cluster_count} police stations.",
+              fieldInfos: [
+                {
+                  fieldName: "cluster_count",
+                  format: {
+                    places: 0,
+                    digitSeparator: true
+                  }
+                }
+              ]
+            },
+            clusterMinSize: "8px",
+            clusterMaxSize: "36px",
+            labelingInfo: [
+              {
+                deconflictionStrategy: "none",
+                labelExpressionInfo: {
+                  expression: "Text($feature.cluster_count, '#,###')"
+                },
+                symbol: {
+                  type: "text",
+                  color: "#004a5d",
+                  font: {
+                    weight: "bold",
+                    family: "Noto Sans",
+                    size: "12px"
+                  }
+                },
+                labelPlacement: "center-center"
+              }
+            ]
+          };
+
+
+          const clusterConfig_h = {
+            type: "cluster",
+            clusterRadius: "100px",
+            // {cluster_count} is an aggregate field containing
+            // the number of features comprised by the cluster
+            popupTemplate: {
+              title: "Cluster summary",
+              content: "This cluster represents {cluster_count} hospitals.",
+              fieldInfos: [
+                {
+                  fieldName: "cluster_count",
+                  format: {
+                    places: 0,
+                    digitSeparator: true
+                  }
+                }
+              ]
+            },
+            clusterMinSize: "8px",
+            clusterMaxSize: "36px",
+            labelingInfo: [
+              {
+                deconflictionStrategy: "none",
+                labelExpressionInfo: {
+                  expression: "Text($feature.cluster_count, '#,###')"
+                },
+                symbol: {
+                  type: "text",
+                  color: "#5d2300",
+                  font: {
+                    weight: "bold",
+                    family: "Noto Sans",
+                    size: "12px"
+                  }
+                },
+                labelPlacement: "center-center"
+              }
+            ]
+          };
+
+          const police = new FeatureLayer({
+            title: "Police Stations in Houston",
+            url: "https://services7.arcgis.com/30eobOTIlEwLzGPT/arcgis/rest/services/police/FeatureServer/0",
+            featureReduction: clusterConfig_p,
+
+            // popupTemplates can still be viewed on
+            // individual features
+            
+            renderer: {
+              type: "simple",
+              field: "mag",
+              symbol: {
+                type: "simple-marker",
+                size: 4,
+                color: "#69dcff",
+                outline: {
+                  color: "rgba(0, 139, 174, 0.5)",
+                  width: 5
+                }
+              }
+            }
+          });
+
+          const hospital = new FeatureLayer({
+            title: "Hospitals in Houston",
+            url: "https://services7.arcgis.com/30eobOTIlEwLzGPT/arcgis/rest/services/facilities1/FeatureServer/0",
+            featureReduction: clusterConfig_h,
+
+            // popupTemplates can still be viewed on
+            // individual features
+            popupTemplate: {
+              title: "{NAME}",
+              content: "Name: {NAME} <br>Address: {ADDRESS}"
+            },            
+            renderer: {
+              type: "simple",
+              field: "mag",
+              symbol: {
+                type: "simple-marker",
+                size: 4,
+                color: "#7bff69",
+                outline: {
+                  color: "rgba(0, 139, 174, 0.5)",
+                  width: 5
+                }
+              }
+            }
+          });
+
+          const boundary1 = new FeatureLayer({
+            title: "Census Block Groups",
+            url: "https://services7.arcgis.com/30eobOTIlEwLzGPT/arcgis/rest/services/vulnerable_population_data/FeatureServer/0",
+            renderer: renderer,
+            popupTemplate: {
+                // autocasts as new PopupTemplate()
+                title: "{County} County, Block Group: {Block_Grou}",
+                content:
+                "percentage of disabled: {r_disable};<br>percentage of elderly: {r_elderly};<br>percentage of carless: {r_carless}",
+  
+            }
+          });
+          boundary1.opacity = 0.5
+
+
+
+          const boundary2 = new FeatureLayer({
+            title: "Precinct",
+            url: "https://services7.arcgis.com/30eobOTIlEwLzGPT/arcgis/rest/services/harris_county_constable_precincts/FeatureServer/0",
+            renderer: {
+                type: "simple", 
+                symbol: {
+                    type: "simple-fill",
+                    color: [235, 235, 135],
+                    outline: {
+                        color: [55, 55, 55],
+                        style: "dash",
+                        width: 2
+                    }
+                },
+            },
+            popupTemplate: {
+                title: "{PRECINCT}"
+            },
+            opacity: 0.3
+          })
+
+          const roadrisk = new FeatureLayer({
+            title: "Risks of Roads",
+            url: "https://services7.arcgis.com/30eobOTIlEwLzGPT/arcgis/rest/services/emms_20220705_draft_results_task45shp/FeatureServer/0",
+            renderer: renderer_line
+          });
+
+          // Add the layers to the map
+          const map = new Map({
+            basemap: "arcgis-light-gray",
+            layers: [ boundary2, boundary1, roadrisk, police, hospital]  //first comes as the bottom layer, piling up
+          });
+
+//          map.add(police)
+//          map.add(hospital)
+
+          // build mapview panel with expanded legend and layer selection 
+          const view = new MapView({
+            container: "viewDiv",
+            map: map,
+            zoom: 10,
+            center: [-95.363, 29.763],
+
+            popup: {
+            dockEnabled: true,
+            dockOptions: {
+              breakpoint: false
+            }
+          }
+          });
+
+          view.ui.add(
+            new Expand({
+              content: new Legend({ view }),
+              view
+            }),
+            "top-left"
+          );
+
+
+
+          ////// FUNCTION 1 show roads within the precinct
+          // SQL query array
+          const roadriskSQL = ["Choose a precinct...", "PCT_NO = 1",  "PCT_NO = 2", "PCT_NO = 3", "PCT_NO = 4"];
+          let whereClause = roadriskSQL[0];
+
+          // Add SQL UI
+          const select = document.createElement("select","");
+          select.setAttribute("class", "esri-widget esri-select");
+          select.setAttribute("style", "width: 200px; font-family: 'Avenir Next'; font-size: 1em");
+          roadriskSQL.forEach(function(query){
+            let option = document.createElement("option");
+            option.innerHTML = query;
+            option.value = query;
+            select.appendChild(option);
+          });
+
+          view.ui.add(select, "top-right");
+
+
+          // Listen for changes
+          select.addEventListener('change', (event) => {
+            whereClause = event.target.value;
+            queryFeatureLayer(view.extent);
+          });
+
+
+//          const roadrisk = new FeatureLayer({
+//            title: "Risks of Roads",
+//            url: "https://services7.arcgis.com/30eobOTIlEwLzGPT/arcgis/rest/services/emms_20220705_draft_results_task45shp/FeatureServer/0"
+//          });
+
+          // Get query layer and set up query
+          function queryFeatureLayer(extent) {
+
+            const roadQuery = {
+            where: whereClause,  // Set by select element
+            spatialRelationship: "intersects", // Relationship operation to apply
+            geometry: extent, // Restricted to visible extent of the map
+            outFields: ["StreetName","Risk_Desc","PCT_NO","FEMA500"],
+            returnGeometry: true
+            };
+
+            roadrisk.queryFeatures(roadQuery)
+
+              .then((results) => {
+               console.log("Feature count: " + results.features.length)
+                displayResults(results);
+
+              }).catch((error) => {
+                console.log(error.error);
+              });
+
+          }
+
+          function displayResults(results) {
+          
+
+            const popupTemplate = {
+              title: "{StreetName}",
+              content: "Precint: {PCT_NO}</br> Risk level: {Risk_Desc}"
+            };
+            // Assign styles and popup to features
+            results.features.map((feature) => {
+              feature.renderer = renderer_line;
+              feature.popupTemplate = popupTemplate;
+              return feature;
+            });
+            // Clear display
+            view.popup.close();
+            view.graphics.removeAll();
+            // Add features to graphics layer
+            view.graphics.addMany(results.features);              
+          }
+
+
+
+
+
+
+
+
+          ////// FUNCTION 2 show summary statistics in the extent
+
+          // helper function for returning a layer instance
+          // based on a given layer title
+          function findLayerByTitle(title) {
+              return view.map.allLayers.find(function (layer) {
+              return layer.title === title;
+              });
+          }
+
+          // When the view loads, set up UI elements
+          let layerList, predominanceLayer;
+
+          view.when(function () {
+              predominanceLayer = findLayerByTitle(
+              "Risks of Roads"
+              );
+              predominanceLayer.outFields = ["*"];
+
+              view.whenLayerView(predominanceLayer).then(function (layerView) {
+                // Update the pie chart after the user stops panning or zooming
+                watchUtils.whenTrue(view, "stationary", function (val) {
+                  watchUtils.whenFalseOnce(layerView, "updating", function (val) {
+                    console.log(val);
+                    queryLayerViewStats(layerView).then(function (newData) {
+                      updateChart(newData);
+                    });
+                  });
+                });
+              });
+
+              // Add a LayerList instance to the view with
+              // custom text and a canvas element in the list item panel
+              // for rendering a chart to display query results
+
+              layerList = new LayerList({
+                view: view,
+                container: document.createElement("div"),
+                listItemCreatedFunction: function (event) {
+                  const item = event.item;
+
+                  // add the pie chart to the Predominance layer list item panel
+                  if (item.title === predominanceLayer.title) {
+                    item.panel = {
+                      content: [
+                        [
+                          "<b>Risks of Roads</b> describe the vulnerability of roads when facing natural disasters. "
+
+                        ].join(""),
+
+                        document.createElement("canvas"),
+
+                        [
+                          "The doughnut chart delineates the percentage of high-risk, meoderate-risk and low-risk roads within the extent"
+                        ].join("")
+                      ],
+                      className: "esri-icon-pie-chart",
+                      open: item.visible
+                    };
+                  }
+                }
+              });
+              layerList.container.style = "height: 100%";
+              let panelDiv = document.getElementById("panel");
+              panelDiv.appendChild(layerList.container);
+           });
+
+
+            // Query the layer view for statistics on road variables in the layer
+            function queryLayerViewStats(layerView) {
+              const roadFields = [
+                "Risk_Low",
+                "Risk_Mod",
+                "Risk_High"
+              ];
+
+              // Creates a query object for statistics of each of the fields listed above
+              const statDefinitions = roadFields.map(function (fieldName) {
+                return {
+                    onStatisticField: fieldName,
+                    outStatisticFieldName: fieldName + "_TOTAL",
+                    statisticType: "sum"
+                  };
+              });
+
+              // query statistics for features only in view extent
+              const query = layerView.layer.createQuery();
+              query.outStatistics = statDefinitions;
+              query.geometry = view.extent;
+
+              // query features within the view's extent on the client
+              return layerView.queryFeatures(query).then(function (response) {
+                const stats = response.features[0].attributes;
+
+                const updatedData = [
+                  stats.Risk_Low_TOTAL,
+                  stats.Risk_Mod_TOTAL, 
+                  stats.Risk_High_TOTAL
+                ];
+
+                // data used to update the pie chart
+                return {
+                  total: stats.Risk_Low_TOTAL + stats.Risk_Mod_TOTAL + stats.Risk_High_TOTAL, 
+                  values: updatedData
+                };
+              });
+            }
+
+
+           // Create a chart to display in a LayerList panel
+           // The chart is created using the Chart.js library
+           let chart, totalCount;
+
+           function updateChart(response) {
+              const newData = response.values;
+              totalCount = response.total;
+              const title = numberWithCommas(totalCount) + " road segments";
+              if (!chart) {
+              // get the canvas element created in the LayerList
+                // and use it to render the chart
+                const canvasElement = layerList.operationalItems.find(function (
+                  item
+               ) {
+                 return predominanceLayer.title === item.title;
+               }).panel.content[1];
+
+               chart = new Chart(canvasElement.getContext("2d"), {
+                type: "doughnut",
+                data: {
+                  labels: [
+                      "low risk",
+                      "moderate risk",
+                      "high risk"
+                  ],
+                  datasets: [
+                    {
+                       label: "Road Risk ",
+                       backgroundColor: [
+                        "green",
+                        "yellow",
+                        "red"
+                       ],
+                       borderColor: "rgb(255, 255, 255)",
+                       borderWidth: 1,
+                       data: newData
+                    }
+                   ]
+                },
+                options: {
+                   responsive: false,
+                   cutoutPercentage: 35,
+                   // Not an ArcGIS legend instance. This legend
+                   // is constructed for the pie chart, not the
+                   // features in the view, though the colors match
+                   // the colors of the features displayed in the map view
+                   legend: {
+                     position: "bottom"
+                   },
+                  title: {
+                    display: true,
+                    text: title
+                  },
+                  tooltips: {
+                    // define custom callback to format data values with commas and %
+                    callbacks: {
+                      label: function (tooltipItem, data) {
+                        const dataIndex = tooltipItem.index;
+                       const value = data.datasets[0].data[dataIndex];
+                        const percentage =
+                          totalCount > 0
+                            ? Math.round((value / totalCount) * 100)
+                            : 0;
+                        return numberWithCommas(value) + " (" + percentage + "%)";
+                       }
+                     }
+                  }
+                }
+              });
+             } else {
+              chart.options.title.text = title;
+              chart.data.datasets[0].data = newData;
+              chart.update();
+             }
+           }
+           // helper function for formatting number labels with commas
+           function numberWithCommas(value) {
+             value = value || 0;
+             return value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+           }
+
+ 
+        });
+      </script>
+    </head>
+  
+    <body>
+      <div id="viewDiv"></div>
+      <div id="panel"></div>
+    </body>
+  </html>
